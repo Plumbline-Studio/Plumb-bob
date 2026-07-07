@@ -1,0 +1,16 @@
+{
+  "project": "owt",
+  "playscripts": {
+    "onboarding": { "route": "/" }
+  },
+  "integrations": {
+    "supabase": { "persistence_checks": true },
+    "posthog": { "project_ref": "SET_ME" },
+    "revenuecat": { "sandbox": true }
+  },
+  "agent": {
+    "layers": ["plumb", "level", "true"],
+    "max_steps": 60,
+    "screenshot_every_step": true
+  }
+}
