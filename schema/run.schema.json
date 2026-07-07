@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/Plumbline-Studio/Plumb-bob/schema/run.schema.json",
+  "title": "Plumb Bob Run Report",
+  "description": "The report contract. This schema is the API — downstream consumers (Console, notifiers) never parse prose. Additive changes bump minor; breaking changes bump major together with the Action major tag.",
+  "type": "object",
+  "required": ["schema_version", "run_id", "project", "trigger", "started_at", "finished_at", "result", "layers"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "run_id": { "type": "string", "format": "uuid" },
+    "project": { "type": "string", "description": "Consumer-declared slug, e.g. 'owt'" },
+    "trigger": {
+      "type": "object",
+      "required": ["repo", "sha", "preview_url"],
+      "properties": {
+        "repo": { "type": "string" },
+        "pr": { "type": ["integer", "null"] },
+        "sha": { "type": "string" },
+        "preview_url": { "type": "string", "format": "uri" }
+      }
+    },
+    "started_at": { "type": "string", "format": "date-time" },
+    "finished_at": { "type": "string", "format": "date-time" },
+    "result": { "enum": ["pass", "fail", "veto"] },
+    "layers": {
+      "type": "object",
+      "required": ["plumb", "level", "true"],
+      "properties": {
+        "plumb": {
+          "type": "object",
+          "required": ["status", "goals"],
+          "properties": {
+            "status": { "enum": ["pass", "fail", "skipped"] },
+            "goals": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["goal", "status"],
+                "properties": {
+                  "goal": { "type": "string" },
+                  "status": { "enum": ["pass", "fail"] },
+                  "reasoning": { "type": "string" },
+                  "screenshots": { "type": "array", "items": { "type": "string", "description": "Relative path — portable across artifact store and Console storage" } }
+                }
+              }
+            }
+          }
+        },
+        "level": {
+          "type": "object",
+          "required": ["status", "playscript", "steps"],
+          "properties": {
+            "status": { "enum": ["pass", "fail", "divergence", "skipped"] },
+            "playscript": { "type": "string" },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["n", "actor", "action", "status"],
+                "properties": {
+                  "n": { "type": "integer" },
+                  "actor": { "enum": ["User", "System", "Bob"] },
+                  "action": { "type": "string" },
+                  "status": { "enum": ["pass", "fail", "divergence"] },
+                  "note": { "type": "string" },
+                  "screenshot": { "type": "string" }
+                }
+              }
+            },
+            "divergences": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["step", "question"],
+                "properties": {
+                  "step": { "type": "integer" },
+                  "question": { "type": "string", "description": "Always framed: script wrong or build wrong? Human decides." }
+                }
+              }
+            }
+          }
+        },
+        "true": {
+          "type": "object",
+          "required": ["status", "scores"],
+          "properties": {
+            "status": { "enum": ["pass", "veto", "skipped"] },
+            "scores": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["heuristic", "score", "citation"],
+                "properties": {
+                  "heuristic": { "type": "string" },
+                  "score": { "type": "integer", "minimum": -2, "maximum": 3 },
+                  "citation": { "type": "string", "description": "Which principle in principles-core/overlay drove this score" },
+                  "rationale": { "type": "string" }
+                }
+              }
+            },
+            "vetoes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["veto", "evidence"],
+                "properties": {
+                  "veto": { "type": "string" },
+                  "evidence": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
