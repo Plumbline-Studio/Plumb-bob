@@ -1,0 +1,38 @@
+name: Plumb Bob
+# Consumer workflow — copy into your product repo at .github/workflows/plumb-bob.yml
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # PR comment only — scoped here, not repo-wide
+    steps:
+      - uses: actions/checkout@v4
+
+      # Resolve your preview URL. Vercel example below; for Cloudflare Pages,
+      # swap for the pages-action output or your deployment event payload.
+      - name: Wait for preview deploy
+        id: preview
+        uses: patrickedqvist/wait-for-vercel-preview@v1.3.2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          max_timeout: 300
+
+      - name: Plumb Bob
+        uses: Plumbline-Studio/Plumb-bob@v1
+        with:
+          preview_url: ${{ steps.preview.outputs.url }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          supabase_url: ${{ secrets.SUPABASE_URL }}
+          supabase_service_key: ${{ secrets.SUPABASE_SERVICE_KEY }}   # read-only key
+          posthog_api_key: ${{ secrets.POSTHOG_API_KEY }}
+          # ingest_url: ${{ secrets.PLUMB_BOB_INGEST_URL }}   # Console, later
+          # ingest_key: ${{ secrets.PLUMB_BOB_INGEST_KEY }}
