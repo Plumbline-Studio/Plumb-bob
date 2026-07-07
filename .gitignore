@@ -1,0 +1,4 @@
+node_modules/
+plumb-bob-report/
+*.log
+.DS_Store

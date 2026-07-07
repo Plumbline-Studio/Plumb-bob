@@ -1,0 +1,28 @@
+{
+  "name": "plumb-bob",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The weight that tests true — an agentic PR verification engine (Plumb / Level / True).",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "verify": "tsx engine/run.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx engine/parse.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "@modelcontextprotocol/sdk": "^1.24.1",
+    "@playwright/mcp": "^0.0.42",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

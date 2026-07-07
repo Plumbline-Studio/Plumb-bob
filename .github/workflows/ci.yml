@@ -1,0 +1,29 @@
+name: CI
+
+# Typecheck + parser test on every PR and push to main. This is the engine's
+# own guardrail; it is distinct from Plumb Bob self-running against a preview
+# (added as a required check after v1 self-runs green — see SETUP.md).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Parser unit test
+        run: npm test
+      - name: Report schema self-check (dry run)
+        run: npx tsx engine/run.ts --dry-run --preview-url https://preview.example.com --config examples/consumer-repo/plumb-bob/plumb-bob.config.json

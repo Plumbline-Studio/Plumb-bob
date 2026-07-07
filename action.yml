@@ -1,0 +1,118 @@
+name: "Plumb Bob"
+description: "The weight that tests true — agentic PR verification across three layers: Plumb (functional), Level (procedural), True (principled)."
+author: "Plumbline Studio"
+branding:
+  icon: "check-circle"
+  color: "gray-dark"
+
+inputs:
+  preview_url:
+    description: "URL of the per-PR preview deploy to test against."
+    required: true
+  config_path:
+    description: "Path (relative to the consumer repo) to plumb-bob.config.json."
+    required: false
+    default: "plumb-bob/plumb-bob.config.json"
+  anthropic_api_key:
+    description: "Anthropic API key. Required for the plumb/level/true layers."
+    required: true
+  supabase_url:
+    description: "Optional Supabase URL for read-only persistence (Bob) checks."
+    required: false
+    default: ""
+  supabase_service_key:
+    description: "Optional Supabase read-only key for Bob checks."
+    required: false
+    default: ""
+  posthog_api_key:
+    description: "Optional PostHog API key for Bob analytics checks."
+    required: false
+    default: ""
+  ingest_url:
+    description: "Optional Console ingest URL. Ingest failure never fails the run."
+    required: false
+    default: ""
+  ingest_key:
+    description: "Optional Console ingest bearer key."
+    required: false
+    default: ""
+  layers:
+    description: "Comma-separated layers to run."
+    required: false
+    default: "plumb,level,true"
+  max_steps:
+    description: "Max agent tool-steps per flow."
+    required: false
+    default: "60"
+  model:
+    description: "Anthropic model id for the agent + scoring passes."
+    required: false
+    default: "claude-opus-4-8"
+  effort:
+    description: "Reasoning effort: low | medium | high | xhigh | max."
+    required: false
+    default: "high"
+  github_token:
+    description: "Token used to post the single PR comment (needs pull-requests: write)."
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  result:
+    description: "pass | fail | veto"
+    value: ${{ steps.plumb-bob.outputs.result }}
+  report_path:
+    description: "Path to the written run.json."
+    value: ${{ steps.plumb-bob.outputs.report_path }}
+  run_id:
+    description: "UUID of this run."
+    value: ${{ steps.plumb-bob.outputs.run_id }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+
+    - name: Install engine dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci
+
+    - name: Install Chromium
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npx playwright install --with-deps chromium
+
+    - name: Run Plumb Bob
+      id: plumb-bob
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        PREVIEW_URL: ${{ inputs.preview_url }}
+        CONFIG_PATH: ${{ inputs.config_path }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        SUPABASE_URL: ${{ inputs.supabase_url }}
+        SUPABASE_SERVICE_KEY: ${{ inputs.supabase_service_key }}
+        POSTHOG_API_KEY: ${{ inputs.posthog_api_key }}
+        INGEST_URL: ${{ inputs.ingest_url }}
+        INGEST_KEY: ${{ inputs.ingest_key }}
+        LAYERS: ${{ inputs.layers }}
+        MAX_STEPS: ${{ inputs.max_steps }}
+        PLUMB_BOB_MODEL: ${{ inputs.model }}
+        PLUMB_BOB_EFFORT: ${{ inputs.effort }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        # OUTPUT_DIR defaults under GITHUB_WORKSPACE so artifacts upload cleanly.
+        OUTPUT_DIR: ${{ github.workspace }}/plumb-bob-report
+        BASE_REF: origin/${{ github.base_ref }}
+      run: npx tsx engine/run.ts
+
+    - name: Upload report + screenshots
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: plumb-bob-report
+        path: ${{ github.workspace }}/plumb-bob-report
+        if-no-files-found: ignore
