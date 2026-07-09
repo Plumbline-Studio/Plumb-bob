@@ -6,7 +6,7 @@ gets dropped against the line three ways:
 
 | Layer | Question |
 |---|---|
-| **Plumb** | Does it work? Goal-directed agentic browser testing against the preview deploy. |
+| **Plumb** | Does it work? Agentic browser testing that inventories and exercises every interactive element on each flow's screens — buttons, links, forms, auth providers — and fails on any erroring control or failed network request. |
 | **Level** | Does it match the documented system? Executes the flow's [Playscript](schema/playscript.spec.md) (Matthies, 1961) and flags divergence. |
 | **True** | Should it exist this way? Scores the change against the [Plumbline principles corpus](principles-core/). Integrity vetoes block merge. |
 

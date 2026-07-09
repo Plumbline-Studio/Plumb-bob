@@ -37,6 +37,15 @@ const IMAGE_EXT: Record<string, string> = {
   "image/webp": "webp",
 };
 
+// Join the text blocks of a tool result (ignoring images) — used for the
+// console/network captures, which are text.
+function textOf(content: ToolResultContent): string {
+  return content
+    .filter((c): c is Anthropic.TextBlockParam => c.type === "text")
+    .map((c) => c.text)
+    .join("\n");
+}
+
 export class PlaywrightMcp {
   private client: Client | null = null;
   private transport: StdioClientTransport | null = null;
@@ -117,6 +126,16 @@ export class PlaywrightMcp {
   async screenshot(): Promise<string | null> {
     const res = await this.call("browser_take_screenshot", {});
     return res.screenshots[0] ?? null;
+  }
+
+  // The browser's own record of what happened — the channel where a failed auth
+  // redirect or a broken XHR actually shows up (a visually-fine page can still
+  // be firing 4xx/5xx behind it). Used by the functional layer's error backstop.
+  async networkText(): Promise<string> {
+    return textOf((await this.call("browser_network_requests", {})).content);
+  }
+  async consoleText(): Promise<string> {
+    return textOf((await this.call("browser_console_messages", {})).content);
   }
 
   async close(): Promise<void> {
