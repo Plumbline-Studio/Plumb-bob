@@ -1,0 +1,19 @@
+# MOVE ME to .github/workflows/ — token cannot write there.
+# Parked by the vetting wave: agent tokens 403 on .github/workflows/, so a
+# human moves this file (git mv ops/gate.workflow.yml .github/workflows/plumbline-gate.yml).
+name: plumbline-gate
+on:
+  pull_request:
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Blocking mode: at stage "scaffold" with no app, all gates pass or skip.
+      # When the engine ships (stage flips past scaffold), the playscripts gate
+      # starts enforcing — that is intended.
+      - name: Run Plumbline gates
+        run: node ops/gate/run-gates.mjs

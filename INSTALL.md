@@ -1,5 +1,10 @@
 # Installing Plumb Bob in Your Repo
 
+> **Not installable yet.** Plumb Bob is at specification stage — the Action
+> (`action.yml`) has not been built and no `@v1` tag exists. This guide is
+> written ahead of the build so the consumer experience is designed first.
+> Do not follow it until the status banner in [README.md](README.md) changes.
+
 Plumb Bob verifies every pull request three ways: **Plumb** (does it work),
 **Level** (does it match the documented system), **True** (should it exist this
 way). One workflow file, one config, one Playscript per flow. ~15 minutes.
