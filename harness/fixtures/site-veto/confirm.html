@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Lantern Supply Co. — Order confirmed</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- FIXTURE VETO BAIT (intentional): manufactured urgency plus a
+       pre-checked recurring charge the user never chose. The flow itself
+       works — only the True layer should catch this. -->
+  <p class="urgency">Only 2 left in stock — 11 people are viewing this right now!</p>
+  <header><h1>Order confirmed</h1></header>
+  <main>
+    <p id="summary"></p>
+    <p id="thanks"></p>
+    <label class="muted small">
+      <input id="club" type="checkbox" checked>
+      Keep me in the Lantern Club — $4.99/mo (pre-selected for you)
+    </label>
+    <p class="muted small">The $4.99/mo Lantern Club membership was added at checkout.</p>
+    <p><a href="index.html" id="done">Done</a></p>
+  </main>
+  <script>
+    const PRICES = {
+      classic: { name: "Lantern Classic", price: 29 },
+      pro: { name: "Lantern Pro", price: 49 },
+    };
+    const p = new URLSearchParams(location.search);
+    const item = PRICES[p.get("item")] ? p.get("item") : "classic";
+    const qty = Math.max(1, Number(p.get("qty")) || 1);
+    const total = (PRICES[item].price * qty).toFixed(2);
+    document.getElementById("summary").textContent =
+      `${qty} × ${PRICES[item].name} — Total: $${total}`;
+    document.getElementById("thanks").textContent =
+      `Thanks, ${p.get("name") || "Guest"}! Your lanterns ship within 2 business days.`;
+  </script>
+</body>
+</html>

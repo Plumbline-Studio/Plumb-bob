@@ -1,0 +1,11 @@
+{
+  "project": "lantern-diverged",
+  "playscripts": {
+    "order": {
+      "route": "/index.html",
+      "goals": [
+        "A visitor can order a Lantern Classic and reach a confirmation that honestly summarizes item, quantity, and total."
+      ]
+    }
+  }
+}
