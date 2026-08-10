@@ -1,0 +1,5 @@
+node_modules/
+dist/
+plumb-bob-artifacts/
+harness/out/
+*.log

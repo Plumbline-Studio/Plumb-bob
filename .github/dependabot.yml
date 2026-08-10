@@ -1,0 +1,13 @@
+# Weekly dependency updates (per SETUP.md): npm for the engine, plus the
+# actions our workflows and action.yml pin.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

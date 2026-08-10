@@ -1,0 +1,9 @@
+{
+  "result": "pass",
+  "plumb_status": "pass",
+  "level_status": "pass",
+  "failed_steps": [],
+  "diverged_steps": [],
+  "vetoes_expected": false,
+  "min_screenshots": 8
+}

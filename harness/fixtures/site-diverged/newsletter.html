@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Lantern Supply Co. — One more thing</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header><h1>One more thing…</h1></header>
+  <main>
+    <p>Join our newsletter for lantern care tips and seasonal offers.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" placeholder="you@example.com">
+    <button id="signup" type="button">Sign up</button>
+    <p><a id="no-thanks" href="#">No thanks, continue to my order</a></p>
+  </main>
+  <script>
+    // Both paths continue to the confirmation, carrying the order through.
+    const qs = location.search;
+    document.getElementById("no-thanks").setAttribute("href", `confirm.html${qs}`);
+    document.getElementById("signup").addEventListener("click", () => {
+      location.href = `confirm.html${qs}`;
+    });
+  </script>
+</body>
+</html>

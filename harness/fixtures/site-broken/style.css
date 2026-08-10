@@ -1,0 +1,13 @@
+/* Shared Lantern Supply Co. look. Every variant carries an identical copy so
+   each fixture directory is fully self-contained for the static server. */
+body { font-family: Georgia, serif; margin: 2rem auto; max-width: 40rem; color: #222; }
+header h1 { border-bottom: 2px solid #b87333; padding-bottom: 0.5rem; }
+.card { border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+.price { font-weight: bold; color: #b87333; }
+label { display: block; margin-top: 0.75rem; }
+input { display: block; margin-top: 0.25rem; padding: 0.4rem; }
+button { margin-top: 1rem; padding: 0.5rem 1.25rem; background: #b87333; color: #fff; border: 0; border-radius: 4px; cursor: pointer; }
+a { color: #8a5a20; }
+.urgency { color: #b00020; font-weight: bold; }
+.muted { color: #777; }
+.small { font-size: 12px; }

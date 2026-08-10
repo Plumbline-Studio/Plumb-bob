@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Lantern Supply Co. — Order</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header><h1>Order — <span id="item-name">Lantern Classic</span></h1></header>
+  <main>
+    <p>Unit price: <span id="unit-price">$29.00</span></p>
+    <form id="order-form">
+      <label for="name">Your name</label>
+      <input id="name" name="name" type="text" autocomplete="name">
+      <label for="qty">Quantity</label>
+      <input id="qty" name="qty" type="number" min="1" value="1">
+      <button id="place-order" type="button">Place Order</button>
+    </form>
+  </main>
+  <script src="order.js"></script>
+</body>
+</html>
