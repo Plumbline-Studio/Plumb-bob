@@ -12,6 +12,9 @@ on:
 jobs:
   live-eval:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -45,3 +48,25 @@ jobs:
           path: |
             harness/out/
           if-no-files-found: ignore
+
+      # KPI capture: append one provenance-stamped line to the eval-history
+      # data branch. Runs even when the harness fails — a failed run is a
+      # data point, not a gap.
+      - name: Append eval history
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f harness/out/eval-report.json ]; then
+            echo "::notice::no eval report — nothing to append"
+            exit 0
+          fi
+          git clone --depth 1 --branch eval-history \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" /tmp/hist
+          node harness/append-history.mjs /tmp/hist/evals/history.jsonl
+          cd /tmp/hist
+          git config user.name "plumb-bob-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add evals/history.jsonl
+          git commit -m "eval: run ${GITHUB_RUN_ID}" || exit 0
+          git push
