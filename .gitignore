@@ -1,4 +1,5 @@
 node_modules/
-plumb-bob-report/
+dist/
+plumb-bob-artifacts/
+harness/out/
 *.log
-.DS_Store

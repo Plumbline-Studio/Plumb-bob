@@ -1,82 +1,86 @@
-// Report assembly + validation.
-//
-// run.schema.json is the contract — the Console and any notifier consume the
-// JSON, never prose. So the engine validates every report against that schema
-// before writing it; a schema violation is a hard error (exit non-zero), never
-// a silently-shipped malformed report.
+/**
+ * Run report assembly, validation, and persistence.
+ *
+ * buildReport computes the overall result (veto > fail > pass; a divergence
+ * alone never fails — that is the Matthies contract), validateReport checks
+ * the finished object against schema/run.schema.json with ajv, and
+ * writeReport lands it in the artifacts directory.
+ */
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, resolve, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
-import AjvImport from "ajv";
+import { readFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { Ajv, type ValidateFunction } from "ajv";
 import addFormatsImport from "ajv-formats";
-// ajv / ajv-formats ship CJS with a `.default` under NodeNext interop; unwrap
-// so the class is constructable regardless of how the module shape resolves.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Ajv: any = (AjvImport as any).default ?? AjvImport;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const addFormats: any = (addFormatsImport as any).default ?? addFormatsImport;
-import type { Config } from "./config.js";
-import type { RunReport, Result, PlumbLayer, LevelLayer, TrueLayer } from "./types.js";
 
-function schemaPath(): string {
-  const engineDir = resolve(dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")));
-  return resolve(engineDir, "..", "schema", "run.schema.json");
-}
+// NodeNext sees ajv-formats' CJS namespace type; at runtime the default
+// import is the plugin function itself.
+const addFormats = addFormatsImport as unknown as (ajv: Ajv) => unknown;
+import type { LevelLayer, PlumbLayer, RunReport, TriggerInfo, TrueLayer } from "./types.js";
 
-export function computeResult(plumb: PlumbLayer, level: LevelLayer, trueLayer: TrueLayer): Result {
-  // A veto blocks merge regardless of functional green (integrity is supreme).
-  if (trueLayer.status === "veto") return "veto";
-  // Functional or procedural failure fails the check. Divergence does NOT.
-  if (plumb.status === "fail" || level.status === "fail") return "fail";
-  return "pass";
-}
-
-export interface AssembleInput {
+/** Everything buildReport needs; run_id is minted here unless supplied. */
+export interface ReportParts {
+  project: string;
+  trigger: TriggerInfo;
   startedAt: string;
   finishedAt: string;
   plumb: PlumbLayer;
   level: LevelLayer;
-  trueLayer: TrueLayer;
+  true: TrueLayer;
+  runId?: string;
 }
 
-export function assembleReport(config: Config, input: AssembleInput): RunReport {
+/**
+ * Assemble a RunReport from layer results. Result precedence: a True-layer
+ * veto wins over everything; a plumb or level "fail" fails the run; anything
+ * else — including level "divergence" and skipped layers — passes, because
+ * divergences are questions for humans, not verdicts.
+ */
+export function buildReport(parts: ReportParts): RunReport {
+  const vetoed = parts.true.status === "veto";
+  const failed = parts.plumb.status === "fail" || parts.level.status === "fail";
   return {
     schema_version: "1.0",
-    run_id: randomUUID(),
-    project: config.consumer.project,
-    trigger: {
-      repo: config.repo,
-      pr: config.pr,
-      sha: config.sha,
-      preview_url: config.previewUrl,
-    },
-    started_at: input.startedAt,
-    finished_at: input.finishedAt,
-    result: computeResult(input.plumb, input.level, input.trueLayer),
-    layers: {
-      plumb: input.plumb,
-      level: input.level,
-      true: input.trueLayer,
-    },
+    run_id: parts.runId ?? randomUUID(),
+    project: parts.project,
+    trigger: parts.trigger,
+    started_at: parts.startedAt,
+    finished_at: parts.finishedAt,
+    result: vetoed ? "veto" : failed ? "fail" : "pass",
+    layers: { plumb: parts.plumb, level: parts.level, true: parts.true },
   };
 }
 
-export function validateReport(report: RunReport): { valid: boolean; errors: string[] } {
-  const schema = JSON.parse(readFileSync(schemaPath(), "utf8"));
-  const ajv = new Ajv({ allErrors: true, strict: false });
-  addFormats(ajv);
-  const validate = ajv.compile(schema);
-  const valid = validate(report) as boolean;
-  const errors = (validate.errors ?? []).map(
-    (e: { instancePath?: string; message?: string }) => `${e.instancePath || "(root)"} ${e.message ?? ""}`.trim(),
-  );
-  return { valid, errors };
+const SCHEMA_URL = new URL("../schema/run.schema.json", import.meta.url);
+let compiledSchema: ValidateFunction | null = null;
+
+/**
+ * Validate a report against schema/run.schema.json. Throws listing every
+ * violation (path + message) — a report that fails its own schema must never
+ * reach a consumer.
+ */
+export function validateReport(report: unknown): asserts report is RunReport {
+  if (!compiledSchema) {
+    const ajv = new Ajv({ allErrors: true });
+    addFormats(ajv);
+    compiledSchema = ajv.compile(JSON.parse(readFileSync(SCHEMA_URL, "utf8")) as object);
+  }
+  if (!compiledSchema(report)) {
+    const details = (compiledSchema.errors ?? [])
+      .map((e) => `${e.instancePath || "(root)"} ${e.message ?? "invalid"}`)
+      .join("; ");
+    throw new Error(`run report failed schema validation: ${details}`);
+  }
 }
 
-export function writeReport(config: Config, report: RunReport): string {
-  mkdirSync(config.outputDir, { recursive: true });
-  const path = join(config.outputDir, "run.json");
-  writeFileSync(path, JSON.stringify(report, null, 2) + "\n");
+/**
+ * Write the report as pretty-printed JSON to `<artifactsDir>/report.json`,
+ * creating the directory if needed. Returns the absolute file path.
+ */
+export async function writeReport(report: RunReport, artifactsDir: string): Promise<string> {
+  await mkdir(artifactsDir, { recursive: true });
+  const path = join(artifactsDir, "report.json");
+  await writeFile(path, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   return path;
 }

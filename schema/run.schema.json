@@ -61,7 +61,7 @@
                   "n": { "type": "integer" },
                   "actor": { "enum": ["User", "System", "Bob"] },
                   "action": { "type": "string" },
-                  "status": { "enum": ["pass", "fail", "divergence"] },
+                  "status": { "enum": ["pass", "fail", "divergence", "skipped"] },
                   "note": { "type": "string" },
                   "screenshot": { "type": "string" }
                 }

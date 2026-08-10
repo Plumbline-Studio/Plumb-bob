@@ -1,28 +1,28 @@
 {
   "name": "plumb-bob",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": true,
+  "description": "Plumbline Studio's agentic verification engine: Plumb (functional), Level (procedural), True (principles).",
   "type": "module",
-  "description": "The weight that tests true — an agentic PR verification engine (Plumb / Level / True).",
-  "license": "UNLICENSED",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "verify": "tsx engine/run.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx engine/parse.test.ts"
+    "test": "vitest run",
+    "engine": "tsx engine/run.ts",
+    "harness": "tsx harness/eval.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.110.0",
-    "@modelcontextprotocol/sdk": "^1.24.1",
-    "@playwright/mcp": "^0.0.42",
-    "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1"
+    "@anthropic-ai/sdk": "^0.116.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "playwright": "^1.62.1"
   },
   "devDependencies": {
-    "@types/node": "^22.10.5",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "@types/node": "^26.2.0",
+    "tsx": "^4.23.11",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }
