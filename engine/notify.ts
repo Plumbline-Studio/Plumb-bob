@@ -1,155 +1,211 @@
-// Reporting out: one PR comment, and an optional Console ingest POST.
-//
-// Exactly ONE PR comment per run — we upsert by a hidden marker so re-runs
-// update in place instead of piling up. The Console ingest is downstream and
-// never a gate: an ingest failure is logged and swallowed, never fails the run.
+/**
+ * Run report notification: one markdown PR comment plus an optional ingest
+ * POST for the downstream viewer.
+ *
+ * renderComment is pure: RunReport in, markdown out. postComment finds and
+ * updates its own previous comment (the COMMENT_MARKER) or creates one via
+ * the GitHub REST API. postIngest ships the report to the Console ingest
+ * endpoint. Neither network call ever throws — the comment and the viewer
+ * are downstream of the verdict, never a gate on it.
+ */
 
+import { readdir } from "node:fs/promises";
 import type { RunReport } from "./types.js";
-import type { Config } from "./config.js";
 
-const MARKER = "<!-- plumb-bob -->";
+/** Hidden marker that lets postComment find and update its own comment. */
+export const COMMENT_MARKER = "<!-- plumb-bob-run -->";
 
-const RESULT_BADGE: Record<string, string> = {
-  pass: "✅ **PASS**",
-  fail: "❌ **FAIL**",
-  veto: "⛔ **VETO** (integrity block)",
-};
+const ACTION_TRUNCATE = 60;
 
-function layerBadge(status: string): string {
-  return (
-    { pass: "✅", fail: "❌", veto: "⛔", divergence: "⚠️", skipped: "⏭️" }[status] ?? "•"
-  );
-}
-
+/** Render the single PR comment for a run. Tables, not prose. */
 export function renderComment(report: RunReport): string {
-  const { layers } = report;
-  const lines: string[] = [];
+  const { plumb, level, true: trueLayer } = report.layers;
+  const verdict = report.result === "pass" ? "pass" : report.result.toUpperCase();
+  const sha = report.trigger.sha.slice(0, 7);
+  const lines: string[] = [
+    COMMENT_MARKER,
+    `**PLUMB BOB — ${verdict}** · ${report.project} · ${sha}`,
+    "",
+    `### Plumb — ${plumb.status}`,
+  ];
 
-  lines.push(MARKER);
-  lines.push(`## Plumb Bob — ${RESULT_BADGE[report.result] ?? report.result}`);
-  lines.push(`*The weight that tests true.* · \`${report.project}\` · run \`${report.run_id}\``);
-  lines.push("");
-
-  // Plumb
-  lines.push(`### ${layerBadge(layers.plumb.status)} Plumb — functional (${layers.plumb.status})`);
-  if (layers.plumb.goals.length === 0) {
-    lines.push("_No goals run._");
+  if (plumb.goals.length === 0) {
+    lines.push("", plumb.status === "skipped" ? "_skipped_" : "_no goals evaluated_");
   } else {
-    for (const g of layers.plumb.goals) {
-      lines.push(`- ${layerBadge(g.status)} **${g.goal}**`);
-      if (g.reasoning) lines.push(`  - ${g.reasoning}`);
-      if (g.screenshots?.length) lines.push(`  - _${g.screenshots.length} screenshot(s) in run artifacts_`);
+    lines.push("", "| Goal | Status | Reasoning |", "| --- | --- | --- |");
+    for (const g of plumb.goals) {
+      lines.push(`| ${cell(g.goal)} | ${g.status} | ${cell(g.reasoning ?? "")} |`);
     }
   }
-  lines.push("");
 
-  // Level
-  lines.push(`### ${layerBadge(layers.level.status)} Level — procedural (${layers.level.status})`);
-  lines.push(`Playscript: **${layers.level.playscript}**`);
-  if (layers.level.steps.length) {
-    const fails = layers.level.steps.filter((s) => s.status === "fail");
-    const divs = layers.level.steps.filter((s) => s.status === "divergence");
-    lines.push(
-      `${layers.level.steps.length} steps · ` +
-        `${layers.level.steps.filter((s) => s.status === "pass").length} pass · ` +
-        `${fails.length} fail · ${divs.length} divergence`,
-    );
-    for (const s of fails) lines.push(`- ❌ Step ${s.n} (${s.actor}): ${s.action}${s.note ? ` — ${s.note}` : ""}`);
-  }
-  if (layers.level.divergences?.length) {
-    lines.push("");
-    lines.push("**Divergences — _script wrong, or build wrong?_ (you decide):**");
-    for (const d of layers.level.divergences) lines.push(`- ⚠️ Step ${d.step}: ${d.question}`);
-  }
-  lines.push("");
-
-  // True
-  lines.push(`### ${layerBadge(layers.true.status)} True — principled (${layers.true.status})`);
-  if (layers.true.scores.length) {
-    for (const s of layers.true.scores) {
-      const sign = s.score > 0 ? `+${s.score}` : `${s.score}`;
-      lines.push(`- \`${sign}\` **${s.heuristic}** [${s.citation}]${s.rationale ? ` — ${s.rationale}` : ""}`);
-    }
+  lines.push("", `### Level — ${level.status} (${level.playscript})`);
+  if (level.steps.length === 0) {
+    lines.push("", level.status === "skipped" ? "_skipped_" : "_no steps executed_");
   } else {
-    lines.push("_No heuristics scored._");
+    lines.push("", "| # | Actor | Action | Status |", "| --- | --- | --- | --- |");
+    for (const s of level.steps) {
+      lines.push(`| ${s.n} | ${s.actor} | ${cell(truncate(s.action))} | ${s.status} |`);
+    }
   }
-  if (layers.true.vetoes?.length) {
-    lines.push("");
-    lines.push("**⛔ Integrity vetoes (merge-blocking):**");
-    for (const v of layers.true.vetoes) lines.push(`- **${v.veto}** — ${v.evidence}`);
+  if (level.divergences && level.divergences.length > 0) {
+    lines.push("", "**Divergences — human decides:**");
+    for (const d of level.divergences) {
+      lines.push(`> **Step ${d.step}:** ${d.question}`);
+    }
   }
-  lines.push("");
-  lines.push("---");
-  lines.push("*Plumbline Studio · Build it true.*");
 
+  lines.push("", `### True — ${trueLayer.status}`);
+  if (trueLayer.scores.length === 0) {
+    lines.push("", trueLayer.status === "skipped" ? "_skipped_" : "_no heuristics scored_");
+  } else {
+    lines.push("", "| Heuristic | Score | Citation | Rationale |", "| --- | --- | --- | --- |");
+    for (const s of trueLayer.scores) {
+      lines.push(`| ${cell(s.heuristic)} | ${s.score} | ${cell(s.citation)} | ${cell(s.rationale ?? "")} |`);
+    }
+  }
+  if (trueLayer.vetoes && trueLayer.vetoes.length > 0) {
+    lines.push("", "**INTEGRITY VETO — blocks merge regardless of totals:**");
+    for (const v of trueLayer.vetoes) {
+      lines.push(`> **${v.veto}** — ${v.evidence}`);
+    }
+  }
+
+  lines.push("", "---", `The weight that tests true. · run ${report.run_id} · Build it true.`);
   return lines.join("\n");
 }
 
-async function gh(config: Config, path: string, init: RequestInit): Promise<Response> {
-  return fetch(`https://api.github.com${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${config.githubToken}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "Content-Type": "application/json",
-      ...(init.headers ?? {}),
-    },
-  });
+/**
+ * Options for postComment. Everything defaults from the standard GitHub
+ * Actions environment; tests inject fetchImpl and log.
+ */
+export interface PostCommentOptions {
+  token?: string | undefined;
+  /** "owner/repo", e.g. GITHUB_REPOSITORY. */
+  repo?: string | undefined;
+  prNumber?: number | undefined;
+  apiBase?: string | undefined;
+  fetchImpl?: typeof fetch | undefined;
+  log?: ((msg: string) => void) | undefined;
 }
 
-export async function postComment(
-  config: Config,
-  body: string,
-  log: (msg: string) => void,
-): Promise<void> {
-  if (!config.githubToken || !config.pr || !config.repo.includes("/")) {
-    log("PR comment skipped (no token / PR number / repo).");
+/**
+ * Post the run comment to the PR, updating this bot's previous comment when
+ * one exists (found by COMMENT_MARKER). Missing PR context or any API failure
+ * logs and returns — the comment never gates the run.
+ */
+export async function postComment(report: RunReport, opts: PostCommentOptions = {}): Promise<void> {
+  const log = opts.log ?? ((msg: string) => console.log(`[plumb-bob] ${msg}`));
+  const token = opts.token ?? process.env.GITHUB_TOKEN;
+  const repo = opts.repo ?? process.env.GITHUB_REPOSITORY;
+  const pr = opts.prNumber ?? report.trigger.pr ?? prNumberFromEnv();
+  if (!token || !repo || pr === null) {
+    log("no PR context (need GITHUB_TOKEN, GITHUB_REPOSITORY, and a PR number) — skipping comment");
     return;
   }
+  const fetchFn = opts.fetchImpl ?? fetch;
+  const api = opts.apiBase ?? process.env.GITHUB_API_URL ?? "https://api.github.com";
+  const headers = {
+    authorization: `Bearer ${token}`,
+    accept: "application/vnd.github+json",
+    "content-type": "application/json",
+    "user-agent": "plumb-bob",
+  };
+
   try {
-    const list = await gh(config, `/repos/${config.repo}/issues/${config.pr}/comments?per_page=100`, {
-      method: "GET",
+    let existingId: number | null = null;
+    const listRes = await fetchFn(`${api}/repos/${repo}/issues/${pr}/comments?per_page=100`, {
+      headers,
     });
-    const comments = (await list.json()) as { id: number; body: string }[];
-    const existing = Array.isArray(comments) ? comments.find((c) => c.body?.includes(MARKER)) : undefined;
+    if (listRes.ok) {
+      const comments = (await listRes.json()) as Array<{ id: number; body?: string }>;
+      existingId = comments.find((c) => c.body?.includes(COMMENT_MARKER))?.id ?? null;
+    } else {
+      log(`could not list PR comments (${listRes.status}); posting a new one`);
+    }
 
-    const res = existing
-      ? await gh(config, `/repos/${config.repo}/issues/comments/${existing.id}`, {
+    const body = JSON.stringify({ body: renderComment(report) });
+    const res = existingId
+      ? await fetchFn(`${api}/repos/${repo}/issues/comments/${existingId}`, {
           method: "PATCH",
-          body: JSON.stringify({ body }),
+          headers,
+          body,
         })
-      : await gh(config, `/repos/${config.repo}/issues/${config.pr}/comments`, {
+      : await fetchFn(`${api}/repos/${repo}/issues/${pr}/comments`, {
           method: "POST",
-          body: JSON.stringify({ body }),
+          headers,
+          body,
         });
-
-    if (!res.ok) log(`PR comment failed: ${res.status} ${await res.text()}`);
-    else log(`PR comment ${existing ? "updated" : "posted"}.`);
+    if (!res.ok) {
+      log(`comment ${existingId ? "update" : "post"} failed: HTTP ${res.status}`);
+      return;
+    }
+    log(`comment ${existingId ? "updated" : "posted"} on ${repo}#${pr}`);
   } catch (err) {
-    log(`PR comment error (non-fatal): ${String(err)}`);
+    log(`comment failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
-// Console ingest — downstream, never a gate. Any failure is swallowed.
-export async function ingest(
-  config: Config,
+export interface PostIngestOptions {
+  ingestUrl: string;
+  ingestKey?: string | undefined;
+  fetchImpl?: typeof fetch | undefined;
+  log?: ((msg: string) => void) | undefined;
+}
+
+/**
+ * POST the report (plus a listing of artifact files) to the viewer's ingest
+ * endpoint. ANY failure logs and returns — the viewer is downstream, never a
+ * gate.
+ */
+export async function postIngest(
   report: RunReport,
-  log: (msg: string) => void,
+  artifactsDir: string,
+  opts: PostIngestOptions,
 ): Promise<void> {
-  if (!config.ingestUrl) return;
-  try {
-    const res = await fetch(config.ingestUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(config.ingestKey ? { Authorization: `Bearer ${config.ingestKey}` } : {}),
-      },
-      body: JSON.stringify(report),
-    });
-    if (!res.ok) log(`Console ingest non-OK (${res.status}); ignored — viewer is never a gate.`);
-    else log("Console ingest ok.");
-  } catch (err) {
-    log(`Console ingest error (ignored): ${String(err)}`);
+  const log = opts.log ?? ((msg: string) => console.log(`[plumb-bob] ${msg}`));
+  if (!opts.ingestUrl) {
+    log("no ingest URL configured — skipping ingest");
+    return;
   }
+  let artifacts: string[] = [];
+  try {
+    artifacts = ((await readdir(artifactsDir, { recursive: true })) as string[])
+      .filter((f) => f.endsWith(".png") || f.endsWith(".json"))
+      .sort();
+  } catch {
+    // An unlistable artifacts dir just means an empty listing.
+  }
+  try {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (opts.ingestKey) headers.authorization = `Bearer ${opts.ingestKey}`;
+    const fetchFn = opts.fetchImpl ?? fetch;
+    const res = await fetchFn(opts.ingestUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ report, artifacts }),
+    });
+    if (!res.ok) {
+      log(`ingest failed: HTTP ${res.status} from ${opts.ingestUrl}`);
+      return;
+    }
+    log(`ingested run ${report.run_id}`);
+  } catch (err) {
+    log(`ingest failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/** Table cells must not break on user text: escape pipes, flatten newlines. */
+function cell(text: string): string {
+  return text.replaceAll("|", "\\|").replaceAll(/\r?\n/g, " ");
+}
+
+function truncate(text: string): string {
+  return text.length <= ACTION_TRUNCATE ? text : `${text.slice(0, ACTION_TRUNCATE - 1)}…`;
+}
+
+function prNumberFromEnv(): number | null {
+  const explicit = process.env.PR_NUMBER ?? process.env.GITHUB_PR_NUMBER;
+  if (explicit && /^\d+$/.test(explicit)) return Number(explicit);
+  const refMatch = process.env.GITHUB_REF?.match(/^refs\/pull\/(\d+)\//);
+  return refMatch ? Number(refMatch[1]) : null;
 }

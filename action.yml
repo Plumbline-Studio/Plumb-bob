@@ -1,118 +1,154 @@
+# Plumb Bob — Plumbline Studio's principled PR verification engine.
+#
+# Consumer usage:
+#   - uses: Plumbline-Studio/Plumb-bob@v1
+#     with:
+#       preview_url: ${{ steps.deploy.outputs.url }}
+#       anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+#
+# The engine runs Plumb (functional) -> Level (procedural) -> True
+# (principles) against the preview deployment, writes report.json plus
+# screenshots to an uploaded artifact, and posts/updates one PR comment.
+# The check fails on fail or veto; a divergence alone never fails.
 name: "Plumb Bob"
-description: "The weight that tests true — agentic PR verification across three layers: Plumb (functional), Level (procedural), True (principled)."
+description: "The weight that tests true — agentic PR verification against playscripts and principles."
 author: "Plumbline Studio"
 branding:
-  icon: "check-circle"
-  color: "gray-dark"
+  icon: "anchor"
+  color: "orange"
 
 inputs:
   preview_url:
-    description: "URL of the per-PR preview deploy to test against."
+    description: "URL of the deployed PR preview the agent verifies against."
+    required: true
+  anthropic_api_key:
+    description: "Anthropic API key powering the agent. Without it every layer reports skipped."
     required: true
   config_path:
-    description: "Path (relative to the consumer repo) to plumb-bob.config.json."
+    description: "Path to plumb-bob.config.json, relative to the consumer repo root."
     required: false
     default: "plumb-bob/plumb-bob.config.json"
-  anthropic_api_key:
-    description: "Anthropic API key. Required for the plumb/level/true layers."
-    required: true
+  playscripts_dir:
+    description: "Override the playscripts directory (relative to the consumer repo root). Defaults to the standard resolution next to the config (issue #4)."
+    required: false
+    default: ""
   supabase_url:
-    description: "Optional Supabase URL for read-only persistence (Bob) checks."
+    description: "Supabase project URL for Bob persistence checks. Absent -> those steps report skipped."
     required: false
     default: ""
   supabase_service_key:
-    description: "Optional Supabase read-only key for Bob checks."
+    description: "Supabase service-role key (read-only checks). Absent -> those steps report skipped."
     required: false
     default: ""
   posthog_api_key:
-    description: "Optional PostHog API key for Bob analytics checks."
+    description: "PostHog personal API key for Bob analytics checks. Absent -> those steps report skipped."
     required: false
     default: ""
   ingest_url:
-    description: "Optional Console ingest URL. Ingest failure never fails the run."
+    description: "Console ingest endpoint to POST the run report to. Absent -> ingest is skipped; ingest failures never fail the check."
     required: false
     default: ""
   ingest_key:
-    description: "Optional Console ingest bearer key."
+    description: "Bearer key for the ingest endpoint."
     required: false
     default: ""
   layers:
-    description: "Comma-separated layers to run."
+    description: "Comma list of layers to run, drawn from plumb,level,true."
     required: false
     default: "plumb,level,true"
   max_steps:
-    description: "Max agent tool-steps per flow."
+    description: "Hard cap on agent browser steps per run."
     required: false
     default: "60"
-  model:
-    description: "Anthropic model id for the agent + scoring passes."
-    required: false
-    default: "claude-opus-4-8"
-  effort:
-    description: "Reasoning effort: low | medium | high | xhigh | max."
-    required: false
-    default: "high"
-  github_token:
-    description: "Token used to post the single PR comment (needs pull-requests: write)."
-    required: false
-    default: ${{ github.token }}
 
 outputs:
   result:
-    description: "pass | fail | veto"
-    value: ${{ steps.plumb-bob.outputs.result }}
+    description: "Run verdict: pass, fail, or veto ('error' when no report was produced)."
+    value: ${{ steps.report.outputs.result }}
   report_path:
-    description: "Path to the written run.json."
-    value: ${{ steps.plumb-bob.outputs.report_path }}
+    description: "Absolute path to report.json in the runner workspace."
+    value: ${{ steps.report.outputs.report_path }}
   run_id:
-    description: "UUID of this run."
-    value: ${{ steps.plumb-bob.outputs.run_id }}
+    description: "UUID of this run, as stamped in the report."
+    value: ${{ steps.report.outputs.run_id }}
 
 runs:
   using: "composite"
   steps:
-    - name: Set up Node
+    - name: Set up Node 22
       uses: actions/setup-node@v4
       with:
-        node-version: "20"
+        node-version: 22
 
     - name: Install engine dependencies
       shell: bash
       working-directory: ${{ github.action_path }}
       run: npm ci
 
-    - name: Install Chromium
+    - name: Install Playwright Chromium
       shell: bash
       working-directory: ${{ github.action_path }}
       run: npx playwright install --with-deps chromium
 
-    - name: Run Plumb Bob
-      id: plumb-bob
+    # The engine writes report.json even on fail/veto; we capture its exit
+    # code instead of letting the step abort so the artifact upload and PR
+    # comment always happen. The notify step re-raises the verdict.
+    - name: Run verification engine
+      id: engine
       shell: bash
       working-directory: ${{ github.action_path }}
       env:
         PREVIEW_URL: ${{ inputs.preview_url }}
-        CONFIG_PATH: ${{ inputs.config_path }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        # Consumer paths resolve against the consumer checkout, not the action path.
+        CONFIG_PATH: ${{ github.workspace }}/${{ inputs.config_path }}
+        PLAYSCRIPTS_DIR: ${{ inputs.playscripts_dir != '' && format('{0}/{1}', github.workspace, inputs.playscripts_dir) || '' }}
+        ARTIFACTS_DIR: ${{ github.workspace }}/plumb-bob-artifacts
+        LAYERS: ${{ inputs.layers }}
+        MAX_STEPS: ${{ inputs.max_steps }}
+        PLUMB_BOB_BASE_REF: ${{ github.base_ref }}
         SUPABASE_URL: ${{ inputs.supabase_url }}
         SUPABASE_SERVICE_KEY: ${{ inputs.supabase_service_key }}
         POSTHOG_API_KEY: ${{ inputs.posthog_api_key }}
-        INGEST_URL: ${{ inputs.ingest_url }}
-        INGEST_KEY: ${{ inputs.ingest_key }}
-        LAYERS: ${{ inputs.layers }}
-        MAX_STEPS: ${{ inputs.max_steps }}
-        PLUMB_BOB_MODEL: ${{ inputs.model }}
-        PLUMB_BOB_EFFORT: ${{ inputs.effort }}
-        GITHUB_TOKEN: ${{ inputs.github_token }}
-        # OUTPUT_DIR defaults under GITHUB_WORKSPACE so artifacts upload cleanly.
-        OUTPUT_DIR: ${{ github.workspace }}/plumb-bob-report
-        BASE_REF: origin/${{ github.base_ref }}
-      run: npx tsx engine/run.ts
+      run: |
+        set +e
+        npx tsx engine/run.ts
+        code=$?
+        echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+        echo "engine exited $code"
+        exit 0
 
-    - name: Upload report + screenshots
-      if: always()
+    - name: Read report outputs
+      id: report
+      shell: bash
+      run: |
+        REPORT="$GITHUB_WORKSPACE/plumb-bob-artifacts/report.json"
+        if [ -f "$REPORT" ]; then
+          {
+            echo "result=$(jq -r .result "$REPORT")"
+            echo "run_id=$(jq -r .run_id "$REPORT")"
+            echo "report_path=$REPORT"
+          } >> "$GITHUB_OUTPUT"
+        else
+          echo "result=error" >> "$GITHUB_OUTPUT"
+          echo "no report.json produced (engine exit ${{ steps.engine.outputs.exit_code }})"
+        fi
+
+    - name: Upload run artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: plumb-bob-report
-        path: ${{ github.workspace }}/plumb-bob-report
-        if-no-files-found: ignore
+        name: plumb-bob-artifacts
+        path: ${{ github.workspace }}/plumb-bob-artifacts/
+        if-no-files-found: warn
+
+    # Posts/updates the PR comment, optionally ingests, then exits with the
+    # verdict: 0 pass, 1 fail/veto, 2 when the engine produced no report.
+    - name: Comment and enforce verdict
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        ARTIFACTS_DIR: ${{ github.workspace }}/plumb-bob-artifacts
+        GITHUB_TOKEN: ${{ github.token }}
+        INGEST_URL: ${{ inputs.ingest_url }}
+        INGEST_KEY: ${{ inputs.ingest_key }}
+      run: npx tsx engine/notify-cli.ts
