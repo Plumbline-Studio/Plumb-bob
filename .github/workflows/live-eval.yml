@@ -1,0 +1,44 @@
+# Live eval harness: real model calls, run on demand and weekly. Costs money,
+# so it never runs per-PR, and it skips gracefully (green, with a notice)
+# on forks or repos where the ANTHROPIC_API_KEY secret is absent.
+name: Live Eval
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays 06:00 UTC — a weekly drift check on real model behavior.
+    - cron: "0 6 * * 1"
+
+jobs:
+  live-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run live harness
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PLUMB_BOB_EVAL_TIER: live
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::notice::ANTHROPIC_API_KEY secret is not configured — skipping live eval"
+            exit 0
+          fi
+          npm run harness
+
+      - name: Upload harness report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-report
+          path: |
+            harness/out/
+          if-no-files-found: ignore
