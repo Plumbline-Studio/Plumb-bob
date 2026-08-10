@@ -1,0 +1,9 @@
+{
+  "result": "veto",
+  "plumb_status": "pass",
+  "level_status": "fail",
+  "failed_steps": [8],
+  "diverged_steps": [],
+  "vetoes_expected": true,
+  "min_screenshots": 8
+}
