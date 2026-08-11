@@ -1,4 +1,4 @@
-﻿# Live eval harness: real model calls, run on demand and weekly. Costs money,
+# Live eval harness: real model calls, run on demand and weekly. Costs money,
 # so it never runs per-PR, and it skips gracefully (green, with a notice)
 # on forks or repos where the ANTHROPIC_API_KEY secret is absent.
 name: Live Eval
@@ -16,7 +16,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
