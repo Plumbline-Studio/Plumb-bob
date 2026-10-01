@@ -1,0 +1,36 @@
+name: ci-report
+
+# Posts each CI result as a pull request comment, so Plumbline workers
+# (which can read PR comments but not check runs) can see it.
+
+on:
+  workflow_run:
+    workflows: ["CI", "ci", "plumbline-gate", "gitleaks", "Live Eval", "Deploy Old World Trade"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+  actions: read
+
+jobs:
+  report:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post the result on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          WF: ${{ github.event.workflow_run.name }}
+          RESULT: ${{ github.event.workflow_run.conclusion }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -z "$PR" ]; then echo "No open PR for $BRANCH"; exit 0; fi
+          FAILED=$(gh run view "$RUN_ID" --repo "$REPO" --json jobs --jq '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join(", ")')
+          BODY="CI-RESULT: $WF $RESULT on ${SHA:0:7}"
+          if [ -n "$FAILED" ]; then BODY="$BODY (failed: $FAILED)"; fi
+          gh pr comment "$PR" --repo "$REPO" --body "$BODY — $RUN_URL"
