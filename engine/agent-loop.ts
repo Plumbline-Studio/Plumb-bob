@@ -114,8 +114,15 @@ const TOOL_DEFS: ToolDef[] = [
   {
     name: "read_page",
     description:
-      "Read the current page: url, title, visible text, and interactable elements with selectorHints.",
-    input_schema: { type: "object", properties: {} },
+      "Read the current page: url, title, the page's text and interactable elements with selectorHints. " +
+      "The text is the whole page, independent of scrolling, returned 4000 characters at a time: " +
+      "textFrom and textLength say where this window sits, and from=<offset> reads the next one.",
+    input_schema: {
+      type: "object",
+      properties: {
+        from: { type: "integer", description: "Character offset to start the text at (default 0)." },
+      },
+    },
   },
   {
     name: "screenshot",
@@ -256,8 +263,9 @@ async function executeTool(
         actionLog.push("wait ok");
         return asText("Page load settled.");
       case "read_page": {
-        const snapshot = await tools.readPage();
-        actionLog.push(`read_page(${snapshot.title || snapshot.url})`);
+        const from = typeof call.input.from === "number" ? call.input.from : 0;
+        const snapshot = await tools.readPage({ from });
+        actionLog.push(`read_page(${snapshot.title || snapshot.url}${from ? ` from ${from}` : ""})`);
         return asText(JSON.stringify(snapshot));
       }
       case "screenshot": {

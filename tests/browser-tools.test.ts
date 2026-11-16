@@ -104,6 +104,23 @@ describe("browser tools against a real chromium page", () => {
     expect(snapshot.elements.some((e) => e.role === "link" && e.name === "See pricing")).toBe(true);
   });
 
+  it("readPage windows long text by offset, independent of scrolling", async () => {
+    // A page whose closing section sits past the first 4000-character window.
+    const filler = "lorem ipsum ".repeat(500);
+    await session.page().setContent(
+      `<html><head><title>Long</title></head><body><h1>Start</h1><p>${filler}</p><h2>6. Section six</h2></body></html>`,
+    );
+    const first = await tools.readPage();
+    expect(first.textFrom).toBe(0);
+    expect(first.textLength).toBeGreaterThan(4000);
+    expect(first.visibleText).not.toContain("6. Section six");
+
+    const next = await tools.readPage({ from: first.textFrom + first.visibleText.length });
+    expect(next.textFrom).toBe(4000);
+    expect(next.visibleText).toContain("6. Section six");
+    expect(next.textLength).toBe(first.textLength);
+  });
+
   it("screenshot writes under artifactsDir and returns a relative path", async () => {
     const relative = await tools.screenshot("evidence one!");
     expect(relative).toBe(join("screenshots", "evidence-one.png"));

@@ -139,7 +139,7 @@ export function createBrowserTools(session: BrowserSession, artifactsDir: string
       return relative;
     },
 
-    async readPage(): Promise<PageSnapshot> {
+    async readPage(opts: { from?: number } = {}): Promise<PageSnapshot> {
       const page = session.page();
       // A read fired right after a navigation can land on a mid-parse DOM
       // (inline scripts still populating content). Wait for the document,
@@ -155,11 +155,16 @@ export function createBrowserTools(session: BrowserSession, artifactsDir: string
       const rawText = String(
         await page.evaluate('document.body ? document.body.innerText : ""'),
       );
-      const visibleText = rawText.replace(/\s+/g, " ").trim().slice(0, VISIBLE_TEXT_CAP);
+      // The text is the whole document, not the viewport, so scrolling never
+      // changes it; a long page is read in windows via `from` instead.
+      const fullText = rawText.replace(/\s+/g, " ").trim();
+      const textFrom = Math.min(Math.max(0, Math.floor(opts.from ?? 0)), fullText.length);
       return {
         url: page.url(),
         title: await page.title(),
-        visibleText,
+        visibleText: fullText.slice(textFrom, textFrom + VISIBLE_TEXT_CAP),
+        textFrom,
+        textLength: fullText.length,
         elements: await snapshotElements(page),
       };
     },
