@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { runAgentTask } from "../engine/agent-loop.js";
+import { FINAL_TURN_NOTICE, runAgentTask } from "../engine/agent-loop.js";
 import { BrowserSession } from "../engine/browser/session.js";
 import { createBrowserTools } from "../engine/browser/tools.js";
 import {
@@ -120,6 +120,30 @@ describe("runAgentTask with a scripted model and a real page", () => {
     expect(failureFedBack).toContain("Action failed:");
     expect(failureFedBack).toContain("the Launch Rocket button");
     expect(result.transcriptSummary).toContain("FAILED");
+  }, 60_000);
+
+  it("asks for a verdict on the final turn instead of running out silently", async () => {
+    await session.freshContext();
+    await session.page().setContent(FIXTURE_HTML);
+
+    // Keeps gathering evidence until told this is the last turn.
+    const model = new MockModelClient((req) =>
+      lastUserText(req).includes(FINAL_TURN_NOTICE)
+        ? doneResponse({ outcome: "success", reasoning: "The heading reads Widget Demo." })
+        : toolCall("read_page", {}),
+    );
+    const result = await runAgentTask({
+      model,
+      tools,
+      task: "Verify the heading reads Widget Demo.",
+      systemPreamble: "You are a QA agent.",
+      maxTurns: 3,
+      screenshotPrefix: "loop-final",
+      artifactsDir,
+    });
+
+    expect(result.outcome).toBe("success");
+    expect(result.transcriptSummary.match(/read_page/g)).toHaveLength(2);
   }, 60_000);
 
   it("fails honestly when maxTurns is exceeded without finish", async () => {

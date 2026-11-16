@@ -45,6 +45,7 @@ const USER_PREAMBLE = [
 const VERIFY_PREAMBLE = [
   "You are verifying one expected system behavior against the current page state.",
   "Gather evidence with read_page and screenshot; do not click, type, or navigate — observation only.",
+  "read_page returns the page's text regardless of scroll position, in windows of 4000 characters; if textLength is larger than what you have read and the content you need has not appeared, call read_page with from set to the next offset. Scroll and screenshot only when what you must check is visual.",
   "If the expected state has not appeared yet, you may use the wait tool and read_page again before concluding the page does not show it.",
   "Call finish with outcome success only if the page genuinely shows the described behavior;",
   "otherwise outcome failure, with reasoning that states exactly what you observed instead.",
@@ -53,6 +54,7 @@ const VERIFY_PREAMBLE = [
 const VETO_PREAMBLE = [
   "You are auditing that a condition the script declares must NEVER occur stayed absent for this entire run.",
   "Gather evidence with read_page and screenshot; you may also re-read the page and navigate back to pages this run already visited to check them.",
+  "read_page returns the page's text regardless of scroll position, in windows of 4000 characters; read every window (from=<offset>) of a page you are checking before concluding.",
   "Do not advance the flow with new actions — no form submissions, no fresh orders.",
   "If the page seems unchanged after re-reading, you may use the wait tool and read_page again before concluding it did not change.",
   "Call finish with outcome success only if the never-condition was NOT observed anywhere in the run;",

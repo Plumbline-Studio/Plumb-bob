@@ -269,7 +269,12 @@ export interface PageElement {
 export interface PageSnapshot {
   url: string;
   title: string;
+  /** One window of the page's text, starting at textFrom. */
   visibleText: string;
+  /** Character offset of visibleText within the whole page text. */
+  textFrom: number;
+  /** Length of the whole page text, so a reader knows whether more remains. */
+  textLength: number;
   elements: PageElement[];
 }
 
@@ -289,7 +294,8 @@ export interface BrowserTools {
   select(target: string, value: string): Promise<void>;
   waitForLoad(): Promise<void>;
   screenshot(name: string): Promise<string>;
-  readPage(): Promise<PageSnapshot>;
+  /** Text is windowed: pass `from` to read past the first window. */
+  readPage(opts?: { from?: number }): Promise<PageSnapshot>;
 }
 
 // ---------------------------------------------------------------------------
