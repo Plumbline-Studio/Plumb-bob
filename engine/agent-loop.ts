@@ -50,6 +50,9 @@ const DEFAULT_MAX_TURNS = 20;
 /** History window: beyond this, older turns collapse into one summary block. */
 const KEEP_MESSAGES = 20;
 const MAX_TOKENS_PER_TURN = 4000;
+export const FINAL_TURN_NOTICE =
+  "This is your final turn. Call finish now with your verdict on what you have already observed; " +
+  "no more evidence can be gathered.";
 
 const TARGET_SCHEMA = {
   type: "string",
@@ -149,6 +152,14 @@ export async function runAgentTask(opts: AgentTaskOptions): Promise<AgentTaskRes
   let shotCounter = 0;
 
   for (let turn = 0; turn < maxTurns; turn++) {
+    // A verifier that is still gathering evidence when the budget ends has
+    // observed plenty and judged nothing; the run then records "did not
+    // finish", which reads as a failure of the page rather than of the
+    // agent. Ask for the verdict on the last turn instead, so the outcome is
+    // always the model's judgement of what it saw.
+    if (turn === maxTurns - 1 && maxTurns > 1) {
+      messages[messages.length - 1]!.content.push({ type: "text", text: FINAL_TURN_NOTICE });
+    }
     const response = await opts.model.complete({
       system: opts.systemPreamble,
       messages,
