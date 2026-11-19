@@ -63,7 +63,8 @@ const TARGET_SCHEMA = {
 const TOOL_DEFS: ToolDef[] = [
   {
     name: "navigate",
-    description: "Navigate the browser to a URL.",
+    description:
+      "Navigate the browser to a URL. A path that starts with \"/\" opens on the site of the current page.",
     input_schema: {
       type: "object",
       properties: { url: { type: "string" } },

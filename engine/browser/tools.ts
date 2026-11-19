@@ -73,7 +73,8 @@ const SNAPSHOT_ROLES = new Set([
 export function createBrowserTools(session: BrowserSession, artifactsDir: string): BrowserTools {
   return {
     async navigate(url: string): Promise<void> {
-      await session.page().goto(url, { waitUntil: "domcontentloaded" });
+      const page = session.page();
+      await page.goto(resolveAddress(url, page.url()), { waitUntil: "domcontentloaded" });
     },
 
     async freshContext(): Promise<void> {
@@ -216,6 +217,25 @@ async function actAndSettle(page: Page, action: () => Promise<void>): Promise<vo
 
 function remainingMs(deadline: number): number {
   return Math.max(1, deadline - Date.now());
+}
+
+/**
+ * A playscript names addresses on the site under test by path ("Goes to the address
+ * `/m/canon/?tab=settings`"), and the model passes them on as written. Playwright refuses a
+ * bare path, so a site-relative address resolves against the current page's origin. Anything
+ * else (a full URL, a protocol-relative "//host" address, or a path while no http(s) page is
+ * open yet) passes through unchanged for Playwright to judge.
+ */
+export function resolveAddress(url: string, currentUrl: string): string {
+  if (!url.startsWith("/") || url.startsWith("//")) return url;
+  let current: URL;
+  try {
+    current = new URL(currentUrl);
+  } catch {
+    return url;
+  }
+  if (current.protocol !== "http:" && current.protocol !== "https:") return url;
+  return new URL(url, current.origin).href;
 }
 
 /**
