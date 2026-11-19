@@ -220,10 +220,6 @@ function remainingMs(deadline: number): number {
 }
 
 /**
- * Resolve a target string to a Locator. Exported for direct testing — the
- * resolver is the piece most likely to misfire on real pages.
- */
-/**
  * A playscript names addresses on the site under test by path ("Goes to the address
  * `/m/canon/?tab=settings`"), and the model passes them on as written. Playwright refuses a
  * bare path, so a site-relative address resolves against the current page's origin. Anything
@@ -242,6 +238,10 @@ export function resolveAddress(url: string, currentUrl: string): string {
   return new URL(url, current.origin).href;
 }
 
+/**
+ * Resolve a target string to a Locator. Exported for direct testing — the
+ * resolver is the piece most likely to misfire on real pages.
+ */
 export async function resolveTarget(page: Page, target: string): Promise<Locator> {
   if (target.startsWith("css=")) return page.locator(target.slice(4)).first();
 
